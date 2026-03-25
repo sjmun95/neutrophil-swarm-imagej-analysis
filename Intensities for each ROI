@@ -1,0 +1,59 @@
+macro "Analyze ROI Intensities (ROI-first, Area+Mean)" {
+    // ==== User options ====
+    MEASURE_CALIBRATED = false; // true = use calibrated values
+    DECIMALS = 4;               // decimals in Results
+    SAVE_RESULTS_TO = "";       // e.g., "C:/path/roi_means.csv" (leave "" to skip saving)
+
+    // ==== Basic checks ====
+    if (nImages==0) { showMessage("No image","Open your image sequence as a stack first."); exit(); }
+    getDimensions(w, h, ch, slices, frames);
+    if (slices < 1) slices = 1;
+    if (bitDepth==24) {
+        showMessage("RGB detected","Convert to 8/16/32-bit or split channels before running.");
+        exit();
+    }
+
+    // ==== Require ROIs ====
+    nROIs = roiManager("count");
+    if (nROIs==0) {
+        showMessage("No ROIs","Add one or more ROIs to the ROI Manager first.");
+        exit();
+    }
+
+    // ==== Measurement setup ====
+    meas = "area mean redirect=None decimal="+DECIMALS;
+    if (MEASURE_CALIBRATED) meas = "area mean calibrated redirect=None decimal="+DECIMALS;
+    run("Set Measurements...", meas);
+
+    // ==== Prepare results ====
+    run("Clear Results");
+    setBatchMode(true);
+    row = 0;
+
+    // ==== ROI-first loop ====
+    for (r=0; r<nROIs; r++) {
+        roiLabel = "ROI_" + (r+1);
+        for (z=1; z<=slices; z++) {
+            setSlice(z);
+            roiManager("Select", r);
+            setSlice(z);  // re-force correct slice
+
+            getStatistics(area, mean);
+            setResult("ROI",   row, roiLabel);
+            setResult("Slice", row, z);
+            setResult("Area",  row, area);
+            setResult("Mean",  row, mean);
+            row++;
+
+            showProgress((r*slices + z)/(nROIs*slices));
+        }
+    }
+
+    setBatchMode(false);
+    updateResults();
+    selectWindow("Results");
+
+    if (SAVE_RESULTS_TO != "") {
+        saveAs("Results", SAVE_RESULTS_TO);
+        print("Results saved to: " + SAVE_RESULTS_TO);
+    }
